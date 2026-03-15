@@ -1,5 +1,6 @@
 import express, { Application } from "express";
 import cors from "cors";
+import { SongRoutes } from "./routes/songsRoute";
 import logger from "pino";
 import cron from "node-cron";
 
@@ -21,7 +22,7 @@ class App {
   }
 
   private initializeRoutes() {
-    // TO DO
+    this.app.use("/api", new SongRoutes().getRouter());
   }
 
   public listen() {
