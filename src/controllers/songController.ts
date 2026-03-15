@@ -5,7 +5,7 @@ import path from "path";
 
 export class SongController extends BaseController {
   public async getSongs(req: Request, res: Response): Promise<void> {
-    const audioPath = path.join(__dirname + "../../storage/", "old_friend.mp3");
+    const audioPath = path.join(__dirname, "../../storage/old_friend.mp3");
     const stat = fs.statSync(audioPath);
     const fileSize = stat.size;
 
@@ -24,7 +24,7 @@ export class SongController extends BaseController {
     const contentLength = end - start + 1;
     const headers = {
       "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-      "Accept-Range": "bytes",
+      "Accept-Ranges": "bytes",
       "Content-Length": contentLength,
       "Content-Type": "audio/mpeg",
     };
