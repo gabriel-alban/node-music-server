@@ -3,6 +3,7 @@ import cors from "cors";
 import { SongRoutes } from "./routes/songsRoute";
 import logger from "pino";
 import cron from "node-cron";
+import path from "path";
 
 class App {
   public app: Application;
@@ -19,10 +20,14 @@ class App {
     this.app.use(express.json());
     this.app.use(cors());
     this.app.use(express.urlencoded({ extended: false }));
+    this.app.use(express.static(path.join(__dirname, "../")));
   }
 
   private initializeRoutes() {
     this.app.use("/api", new SongRoutes().getRouter());
+    this.app.get("/", (req, res) => {
+      res.sendFile(path.join(__dirname, "../test.html"));
+    });
   }
 
   public listen() {
