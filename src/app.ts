@@ -1,4 +1,5 @@
 import express, { Application } from "express";
+import { Request, Response } from "express";
 import cors from "cors";
 import { SongRoutes } from "./routes/songsRoute";
 import logger from "pino";
@@ -25,7 +26,7 @@ class App {
 
   private initializeRoutes() {
     this.app.use("/api", new SongRoutes().getRouter());
-    this.app.get("/", (req, res) => {
+    this.app.get("/", (req: Request, res: Response) => {
       res.sendFile(path.join(__dirname, "../test.html"));
     });
   }
