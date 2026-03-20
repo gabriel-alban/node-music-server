@@ -6,6 +6,7 @@ import logger from "pino";
 import cron from "node-cron";
 import path from "path";
 import { AuthRoutes } from "./routes/authRoute";
+import { AdminSongsRoutes } from "./routes/admin/songsRoute";
 
 class App {
   public app: Application;
@@ -28,6 +29,7 @@ class App {
   private initializeRoutes() {
     this.app.use("/api", new SongRoutes().getRouter());
     this.app.use("/api", new AuthRoutes().getRouter());
+    this.app.use("/api", new AdminSongsRoutes().getRouter());
     this.app.get("/", (_req: Request, res: Response) => {
       res.sendFile(path.join(__dirname, "../test.html"));
     });

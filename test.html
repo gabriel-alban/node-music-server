@@ -2,10 +2,241 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Audio Test</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chunk Upload Test</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        max-width: 720px;
+        margin: 40px auto;
+        padding: 0 16px;
+      }
+
+      h1,
+      h2 {
+        margin-bottom: 12px;
+      }
+
+      .block {
+        margin-bottom: 24px;
+        padding: 16px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+      }
+
+      input,
+      button,
+      textarea {
+        width: 100%;
+        margin-top: 8px;
+        margin-bottom: 12px;
+        padding: 10px;
+        box-sizing: border-box;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      progress {
+        width: 100%;
+        height: 20px;
+      }
+
+      pre {
+        background: #f6f6f6;
+        padding: 12px;
+        border-radius: 8px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+    </style>
   </head>
   <body>
-    <h2>Audio Player Test</h2>
-    <audio controls src="/api/songs"></audio>
+    <h1>Audio Chunk Upload Test</h1>
+
+    <div class="block">
+      <h2>Login</h2>
+      <input id="email" type="email" placeholder="Email" />
+      <input id="password" type="password" placeholder="Password" />
+      <button id="loginBtn" type="button">Login</button>
+    </div>
+
+    <div class="block">
+      <h2>Token</h2>
+      <textarea id="token" rows="4" placeholder="JWT token"></textarea>
+    </div>
+
+    <div class="block">
+      <h2>Upload</h2>
+      <input id="audioFile" type="file" accept="audio/*" />
+      <button id="uploadBtn" type="button">Upload Audio</button>
+      <progress id="progress" value="0" max="100"></progress>
+    </div>
+
+    <div class="block">
+      <h2>Preview</h2>
+      <audio id="player" controls></audio>
+    </div>
+
+    <div class="block">
+      <h2>Logs</h2>
+      <pre id="logs"></pre>
+    </div>
+
+    <script>
+      const CHUNK_SIZE = 1024 * 1024;
+      const logs = document.getElementById("logs");
+      const progress = document.getElementById("progress");
+      const tokenInput = document.getElementById("token");
+      const player = document.getElementById("player");
+
+      function log(message) {
+        logs.textContent += message + "\n";
+      }
+
+      function createUploadId() {
+        return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      }
+
+      async function login() {
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value.trim();
+
+        const response = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email, password }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.token) {
+          throw new Error(result.message || "Login failed");
+        }
+
+        tokenInput.value = result.token;
+        log("Login successful");
+      }
+
+      async function uploadFile(file, token) {
+        const uploadId = createUploadId();
+        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+        let finalFileData = null;
+
+        log(`Upload started: ${file.name}`);
+        log(`Size: ${file.size} bytes`);
+        log(`Chunks: ${totalChunks}`);
+
+        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
+          const start = chunkIndex * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, file.size);
+          const chunk = file.slice(start, end);
+
+          const formData = new FormData();
+          formData.append("chunk", chunk, file.name);
+          formData.append("uploadId", uploadId);
+          formData.append("fileName", file.name);
+          formData.append("chunkIndex", String(chunkIndex));
+          formData.append("totalChunks", String(totalChunks));
+          formData.append("totalSize", String(file.size));
+
+          const response = await fetch("/api/admin/songs", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            body: formData,
+          });
+
+          const result = await response.json();
+
+          if (!response.ok || !result.success) {
+            throw new Error(result.error || `Chunk ${chunkIndex} failed`);
+          }
+
+          log(`Chunk ${chunkIndex + 1}/${totalChunks} uploaded`);
+          progress.value = Math.round(((chunkIndex + 1) / totalChunks) * 100);
+
+          if (result.data.status === "completed") {
+            finalFileData = result.data;
+          }
+        }
+
+        if (!finalFileData) {
+          throw new Error("File was not assembled after last chunk");
+        }
+
+        log("All chunks uploaded");
+        log(`Assembled file: ${finalFileData.fileName}`);
+        log(`Public path: ${finalFileData.path}`);
+
+        const completeResponse = await fetch("/api/admin/songs/complete", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            fileName: finalFileData.fileName,
+            path: finalFileData.path,
+          }),
+        });
+
+        const completeResult = await completeResponse.json();
+
+        if (!completeResponse.ok || !completeResult.success) {
+          throw new Error(completeResult.error || "Complete upload failed");
+        }
+
+        log("Saved in DB");
+        log(`DB path: ${completeResult.data.path}`);
+
+        return completeResult.data;
+      }
+
+      document
+        .getElementById("loginBtn")
+        .addEventListener("click", async () => {
+          logs.textContent = "";
+          try {
+            await login();
+          } catch (error) {
+            log(error.message);
+          }
+        });
+
+      document
+        .getElementById("uploadBtn")
+        .addEventListener("click", async () => {
+          logs.textContent = "";
+          progress.value = 0;
+
+          const fileInput = document.getElementById("audioFile");
+          const file = fileInput.files[0];
+          const token = tokenInput.value.trim();
+
+          if (!file) {
+            log("Select an audio file first");
+            return;
+          }
+
+          if (!token) {
+            log("Missing JWT token");
+            return;
+          }
+
+          try {
+            const savedSong = await uploadFile(file, token);
+            player.src = savedSong.path;
+            player.load();
+            log("Audio preview ready");
+          } catch (error) {
+            log(error.message);
+          }
+        });
+    </script>
   </body>
 </html>
