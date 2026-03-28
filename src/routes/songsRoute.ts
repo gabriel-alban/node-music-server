@@ -6,7 +6,11 @@ export class SongRoutes extends BaseRoute {
 
   protected initializeRoutes(): void {
     this.router.get("/songs", (req, res) =>
-      this.songController.getSongs(req, res),
+      this.songController.listSongs(req, res),
     );
+
+    this.router.get("/songs/:id/stream", (req, res) => {
+      this.songController.streamSong(req, res);
+    });
   }
 }
