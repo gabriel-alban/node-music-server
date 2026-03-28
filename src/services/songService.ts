@@ -20,6 +20,18 @@ export class SongService extends AbstractService {
     return `/src/storage/${storedName}`;
   }
 
+  public getAllSongs() {
+    return this.prismaClient.song.findMany({
+      orderBy: { id: "desc" },
+    });
+  }
+
+  public async getSongById(id: number) {
+    const song = await this.prismaClient.song.findUnique({ where: { id } });
+    if (!song) throw new Error("Song not found");
+    return song;
+  }
+
   private async allChunksExist(
     uploadDir: string,
     totalChunks: number,

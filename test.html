@@ -50,6 +50,30 @@
         white-space: pre-wrap;
         word-break: break-word;
       }
+
+      #songsList {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .song-row {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        gap: 12px;
+      }
+
+      .song-title {
+        font-weight: 600;
+      }
+
+      .song-row audio {
+        width: 100%;
+      }
     </style>
   </head>
   <body>
@@ -80,6 +104,12 @@
     </div>
 
     <div class="block">
+      <h2>My Songs</h2>
+      <button id="refreshSongsBtn" type="button">Refresh Songs</button>
+      <div id="songsList"></div>
+    </div>
+
+    <div class="block">
       <h2>Logs</h2>
       <pre id="logs"></pre>
     </div>
@@ -90,9 +120,45 @@
       const progress = document.getElementById("progress");
       const tokenInput = document.getElementById("token");
       const player = document.getElementById("player");
+      const songsList = document.getElementById("songsList");
+
+      function streamUrlById(id) {
+        return `/api/songs/${id}/stream`;
+      }
 
       function log(message) {
         logs.textContent += message + "\n";
+      }
+
+      function renderSongs(songs) {
+        if (!Array.isArray(songs) || songs.length === 0) {
+          songsList.innerHTML = "<p>No songs found</p>";
+          return;
+        }
+
+        songsList.innerHTML = songs
+          .map(
+            (song) => `
+              <div class="song-row">
+                <span class="song-title">${song.name}</span>
+                <audio controls preload="none" src="${streamUrlById(song.id)}"></audio>
+              </div>
+            `,
+          )
+          .join("");
+      }
+
+      async function loadSongs() {
+        const response = await fetch("/api/songs");
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || "Failed to load songs");
+        }
+
+        const songs = Array.isArray(result) ? result : result.data || [];
+        renderSongs(songs);
+        log(`Loaded ${songs.length} songs`);
       }
 
       function createUploadId() {
@@ -230,13 +296,28 @@
 
           try {
             const savedSong = await uploadFile(file, token);
-            player.src = savedSong.path;
+            player.src = streamUrlById(savedSong.id);
             player.load();
             log("Audio preview ready");
+            await loadSongs();
           } catch (error) {
             log(error.message);
           }
         });
+
+      document
+        .getElementById("refreshSongsBtn")
+        .addEventListener("click", async () => {
+          try {
+            await loadSongs();
+          } catch (error) {
+            log(error.message);
+          }
+        });
+
+      loadSongs().catch((error) => {
+        log(error.message);
+      });
     </script>
   </body>
 </html>
