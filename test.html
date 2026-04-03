@@ -74,6 +74,39 @@
       .song-row audio {
         width: 100%;
       }
+
+      .player-controls {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .player-controls button {
+        width: auto;
+        margin: 0;
+      }
+
+      #nowPlaying {
+        margin-bottom: 8px;
+        font-weight: 600;
+      }
+
+      .player-song-picker {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-top: 10px;
+      }
+
+      .player-song-picker select {
+        flex: 1;
+        padding: 10px;
+      }
+
+      .player-song-picker button {
+        width: auto;
+        margin: 0;
+      }
     </style>
   </head>
   <body>
@@ -99,11 +132,23 @@
     </div>
 
     <div class="block">
-      <h2>Preview</h2>
+      <h2>Player</h2>
+      <p id="nowPlaying">Now playing: none</p>
       <audio id="player" controls></audio>
+      <div class="player-song-picker">
+        <select id="songSelect">
+          <option value="">No songs loaded</option>
+        </select>
+        <button id="loadSongsBtn" type="button">Load Songs</button>
+      </div>
+      <div class="player-controls">
+        <button id="prevSongBtn" type="button">Previous Song</button>
+        <button id="playPauseBtn" type="button">Play</button>
+        <button id="nextSongBtn" type="button">Next Song</button>
+      </div>
     </div>
 
-    <div class="block">
+    <!-- <div class="block">
       <h2>My Songs</h2>
       <button id="refreshSongsBtn" type="button">Refresh Songs</button>
       <div id="songsList"></div>
@@ -112,7 +157,7 @@
     <div class="block">
       <h2>Logs</h2>
       <pre id="logs"></pre>
-    </div>
+    </div> -->
 
     <script>
       const CHUNK_SIZE = 1024 * 1024;
@@ -121,31 +166,121 @@
       const tokenInput = document.getElementById("token");
       const player = document.getElementById("player");
       const songsList = document.getElementById("songsList");
+      const songSelect = document.getElementById("songSelect");
+      const loadSongsBtn = document.getElementById("loadSongsBtn");
+      const nowPlaying = document.getElementById("nowPlaying");
+      const playPauseBtn = document.getElementById("playPauseBtn");
+      let songsQueue = [];
+      let currentSongIndex = -1;
 
       function streamUrlById(id) {
         return `/api/songs/${id}/stream`;
       }
 
       function log(message) {
-        logs.textContent += message + "\n";
+        if (logs) {
+          logs.textContent += message + "\n";
+        }
+        console.log(message);
+      }
+
+      function updatePlayPauseLabel() {
+        playPauseBtn.textContent = player.paused ? "Play" : "Pause";
+      }
+
+      function setCurrentSong(index) {
+        if (!songsQueue.length || index < 0 || index >= songsQueue.length) {
+          currentSongIndex = -1;
+          player.removeAttribute("src");
+          player.load();
+          nowPlaying.textContent = "Now playing: none";
+          updatePlayPauseLabel();
+          return;
+        }
+
+        currentSongIndex = index;
+        const song = songsQueue[currentSongIndex];
+        player.src = streamUrlById(song.id);
+        player.load();
+        nowPlaying.textContent = `Now playing: ${song.name}`;
+        updatePlayPauseLabel();
+      }
+
+      function nextSong() {
+        if (!songsQueue.length) {
+          return;
+        }
+
+        const nextIndex = (currentSongIndex + 1) % songsQueue.length;
+        setCurrentSong(nextIndex);
+        player.play().catch(() => {});
+      }
+
+      function previousSong() {
+        if (!songsQueue.length) {
+          return;
+        }
+
+        const prevIndex =
+          (currentSongIndex - 1 + songsQueue.length) % songsQueue.length;
+        setCurrentSong(prevIndex);
+        player.play().catch(() => {});
       }
 
       function renderSongs(songs) {
         if (!Array.isArray(songs) || songs.length === 0) {
-          songsList.innerHTML = "<p>No songs found</p>";
+          if (songsList) {
+            songsList.innerHTML = "<p>No songs found</p>";
+          }
+          songSelect.innerHTML = '<option value="">No songs loaded</option>';
+          songsQueue = [];
+          setCurrentSong(-1);
           return;
         }
 
-        songsList.innerHTML = songs
+        songsQueue = songs;
+
+        if (currentSongIndex < 0 || currentSongIndex >= songsQueue.length) {
+          setCurrentSong(0);
+        }
+
+        songSelect.innerHTML = songsQueue
           .map(
-            (song) => `
-              <div class="song-row">
-                <span class="song-title">${song.name}</span>
-                <audio controls preload="none" src="${streamUrlById(song.id)}"></audio>
-              </div>
-            `,
+            (song, index) => `<option value="${index}">${song.name}</option>`,
           )
           .join("");
+
+        songSelect.value = String(currentSongIndex >= 0 ? currentSongIndex : 0);
+
+        if (songsList) {
+          songsList.innerHTML = songs
+            .map(
+              (song) => `
+                <div class="song-row">
+                  <span class="song-title">${song.name}</span>
+                  <button type="button" data-song-id="${song.id}">Play in main player</button>
+                </div>
+              `,
+            )
+            .join("");
+
+          songsList
+            .querySelectorAll("button[data-song-id]")
+            .forEach((button) => {
+              button.addEventListener("click", () => {
+                const songId = Number(button.dataset.songId);
+                const index = songsQueue.findIndex(
+                  (song) => song.id === songId,
+                );
+
+                if (index >= 0) {
+                  setCurrentSong(index);
+                  songSelect.value = String(index);
+                  player.play().catch(() => {});
+                }
+              });
+            });
+        }
       }
 
       async function loadSongs() {
@@ -266,7 +401,9 @@
       document
         .getElementById("loginBtn")
         .addEventListener("click", async () => {
-          logs.textContent = "";
+          if (logs) {
+            logs.textContent = "";
+          }
           try {
             await login();
           } catch (error) {
@@ -277,7 +414,9 @@
       document
         .getElementById("uploadBtn")
         .addEventListener("click", async () => {
-          logs.textContent = "";
+          if (logs) {
+            logs.textContent = "";
+          }
           progress.value = 0;
 
           const fileInput = document.getElementById("audioFile");
@@ -296,24 +435,91 @@
 
           try {
             const savedSong = await uploadFile(file, token);
-            player.src = streamUrlById(savedSong.id);
-            player.load();
-            log("Audio preview ready");
             await loadSongs();
+            const savedIndex = songsQueue.findIndex(
+              (song) => song.id === savedSong.id,
+            );
+
+            if (savedIndex >= 0) {
+              setCurrentSong(savedIndex);
+            }
+
+            log("Audio preview ready");
           } catch (error) {
             log(error.message);
           }
         });
 
-      document
-        .getElementById("refreshSongsBtn")
-        .addEventListener("click", async () => {
+      document.getElementById("nextSongBtn").addEventListener("click", () => {
+        nextSong();
+        if (currentSongIndex >= 0) {
+          songSelect.value = String(currentSongIndex);
+        }
+      });
+
+      document.getElementById("prevSongBtn").addEventListener("click", () => {
+        previousSong();
+        if (currentSongIndex >= 0) {
+          songSelect.value = String(currentSongIndex);
+        }
+      });
+
+      songSelect.addEventListener("change", () => {
+        const index = Number(songSelect.value);
+        if (Number.isNaN(index) || index < 0 || index >= songsQueue.length) {
+          return;
+        }
+
+        setCurrentSong(index);
+      });
+
+      loadSongsBtn.addEventListener("click", async () => {
+        try {
+          await loadSongs();
+        } catch (error) {
+          log(error.message);
+        }
+      });
+
+      playPauseBtn.addEventListener("click", async () => {
+        if (!songsQueue.length) {
+          return;
+        }
+
+        if (currentSongIndex < 0) {
+          setCurrentSong(0);
+        }
+
+        try {
+          if (player.paused) {
+            await player.play();
+          } else {
+            player.pause();
+          }
+        } catch (error) {
+          log(error.message);
+        }
+      });
+
+      player.addEventListener("play", updatePlayPauseLabel);
+      player.addEventListener("pause", updatePlayPauseLabel);
+      player.addEventListener("ended", () => {
+        nextSong();
+        if (currentSongIndex >= 0) {
+          songSelect.value = String(currentSongIndex);
+        }
+      });
+
+      const refreshSongsBtn = document.getElementById("refreshSongsBtn");
+      if (refreshSongsBtn) {
+        refreshSongsBtn.addEventListener("click", async () => {
           try {
             await loadSongs();
           } catch (error) {
             log(error.message);
           }
         });
+      }
 
       loadSongs().catch((error) => {
         log(error.message);
