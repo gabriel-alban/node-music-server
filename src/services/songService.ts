@@ -1,6 +1,7 @@
 import { AbstractService } from "./abstractService";
 import fs from "fs";
 import path from "path";
+import * as mm from "music-metadata";
 import { CompleteUploadInput, SaveChunkInput, SaveChunkResult } from "../types";
 
 export class SongService extends AbstractService {
@@ -187,10 +188,21 @@ export class SongService extends AbstractService {
       throw new Error("File not found in storage");
     }
 
+    let duration: number | null = null;
+    try {
+      const metadata = await mm.parseFile(absolutePath);
+      duration = metadata.format.duration
+        ? Math.round(metadata.format.duration)
+        : null;
+    } catch {
+      // durata ramane null daca fisierul nu poate fi citit
+    }
+
     const song = await this.prismaClient.song.create({
       data: {
         name: fileName,
         path: publicPath,
+        duration,
       },
     });
 
@@ -198,6 +210,7 @@ export class SongService extends AbstractService {
       id: song.id,
       name: song.name,
       path: song.path,
+      duration: song.duration,
     };
   }
 }

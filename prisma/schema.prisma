@@ -22,7 +22,11 @@ model User {
 }
 
 model Song {
-  id Int @id @default(autoincrement())
-  name String @unique
-  path String
+  id        Int     @id @default(autoincrement())
+  name      String  @unique
+  path      String
+  artist    String?
+  album     String?
+  duration  Int?    // durata in secunde
+  coverUrl  String?
 }
