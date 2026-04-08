@@ -44,8 +44,24 @@ export class SongController extends BaseController {
       }
 
       const CHUNK_SIZE = 10 ** 6;
-      const start = Number(range.replace(/\D/g, ""));
-      const end = Math.min(start + CHUNK_SIZE, fileSize - 1);
+      const rangeMatch = range.match(/bytes=(\d+)-(\d*)/);
+      if (!rangeMatch) {
+        res.writeHead(416, { "Content-Range": `bytes */${fileSize}` });
+        res.end();
+        return;
+      }
+
+      const start = parseInt(rangeMatch[1], 10);
+      const requestedEnd = rangeMatch[2] ? parseInt(rangeMatch[2], 10) : undefined;
+      const end = requestedEnd !== undefined
+        ? Math.min(requestedEnd, fileSize - 1)
+        : Math.min(start + CHUNK_SIZE, fileSize - 1);
+
+      if (start >= fileSize) {
+        res.writeHead(416, { "Content-Range": `bytes */${fileSize}` });
+        res.end();
+        return;
+      }
 
       const contentLength = end - start + 1;
       const headers = {
